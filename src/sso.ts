@@ -4,7 +4,7 @@
  * PII-safe logger, NEXTAUTH_SECRET guard) as a configurable factory.
  */
 
-import { Clearance, GenderEnum } from "@system-b15/hive-core";
+import { Clearance, GenderEnum } from "@system-b90/hive-core";
 import { AuthOptions, CallbacksOptions, Profile } from "next-auth";
 import { OAuthConfig } from "next-auth/providers/index";
 

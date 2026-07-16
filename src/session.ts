@@ -1,4 +1,4 @@
-import { Clearance, GenderEnum } from "@system-b15/hive-core";
+import { Clearance, GenderEnum } from "@system-b90/hive-core";
 import { Session } from "next-auth";
 
 export type AuthSessionUser = {

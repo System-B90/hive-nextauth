@@ -1,4 +1,4 @@
-import { HiveClient, UserNotLoggedInError } from "@system-b15/hive-core";
+import { HiveClient, UserNotLoggedInError } from "@system-b90/hive-core";
 import { AuthOptions, getServerSession } from "next-auth";
 
 import { AuthSessionData } from "./session.js";

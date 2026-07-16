@@ -1,11 +1,11 @@
 {
-    "name": "@system-b15/hive-nextauth",
-    "version": "0.1.0",
-    "description": "NextAuth Hive OIDC provider, session types, and session-to-client helpers for System-B15 apps",
+    "name": "@system-b90/hive-nextauth",
+    "version": "0.1.1",
+    "description": "NextAuth Hive OIDC provider, session types, and session-to-client helpers for System-B90 apps",
     "license": "UNLICENSED",
     "repository": {
         "type": "git",
-        "url": "https://github.com/System-B15/hive-nextauth.git"
+        "url": "https://github.com/System-B90/hive-nextauth.git"
     },
     "publishConfig": {
         "registry": "https://npm.pkg.github.com"
@@ -27,7 +27,7 @@
         "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
     },
     "dependencies": {
-        "@system-b15/hive-core": "^0.1.1"
+        "@system-b90/hive-core": "^0.1.2"
     },
     "peerDependencies": {
         "next-auth": "^4.24.0"
