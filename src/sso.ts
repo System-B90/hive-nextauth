@@ -78,6 +78,25 @@ export type HiveAuthConfig = {
 };
 
 /**
+ * Pulls a human-readable cause out of NextAuth's error metadata.
+ *
+ * NextAuth passes either an Error or an object wrapping one, and the useful
+ * part is the name and message. Those are safe to log in production; the
+ * surrounding object is not, because for OAuth errors it can include the
+ * provider response and therefore tokens.
+ */
+function describeErrorCause(metadata: unknown): string | null {
+    if (!metadata) return null;
+    if (metadata instanceof Error) return `${metadata.name}: ${metadata.message}`;
+    if (typeof metadata === "object") {
+        const error = (metadata as { error?: unknown }).error;
+        if (error instanceof Error) return `${error.name}: ${error.message}`;
+        if (typeof error === "string") return error;
+    }
+    return null;
+}
+
+/**
  * Builds the app's NextAuth options wired to the Hive OIDC provider:
  * PKCE+state checks, DOT→SimpleJWT token exchange on first sign-in,
  * token-expiry propagation into the session, and a logger that avoids
@@ -230,11 +249,19 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
         logger: {
             error(code, metadata) {
                 console.error(`\n❌ [NextAuth Error]: ${code}`);
-                // Metadata can carry tokens/PII (e.g. OAuthCallbackError includes
-                // the provider response) — only dump it outside production.
                 if (process.env.NODE_ENV !== "production") {
                     console.error(JSON.stringify(metadata, null, 2));
                 }
+                // The cause, always. Metadata can carry tokens/PII (e.g.
+                // OAuthCallbackError includes the provider response), so the
+                // full dump stays outside production -- but suppressing
+                // everything made production failures undiagnosable, and
+                // `next start` runs in production. A CI run failed on
+                // SIGNIN_OAUTH_ERROR with nothing in the log but this repo's
+                // own Hive URL. An error's name and message do not carry the
+                // token payload; the object around them does.
+                const cause = describeErrorCause(metadata);
+                if (cause) console.error(`Cause: ${cause}`);
                 console.error(`Hive URL: ${hiveUrl}`);
             },
             warn(code) {
