@@ -243,8 +243,10 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
         );
     }
 
+    const debugEnabled = config.debug ?? process.env.NODE_ENV !== "production";
+
     return {
-        debug: config.debug ?? process.env.NODE_ENV !== "production",
+        debug: debugEnabled,
         // Override the logger to intercept metadata
         logger: {
             error(code, metadata) {
@@ -267,10 +269,26 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
             warn(code) {
                 console.warn(`\n⚠️ [NextAuth Warning]: ${code}`);
             },
-            debug(code, metadata) {
-                console.log(`\n🐛 [NextAuth Debug]: ${code}`);
-                console.log(JSON.stringify(metadata, null, 2));
-            },
+            // Only supplied when debug is actually on. next-auth installs a
+            // noop `debug` when the `debug` option is false and then lets a
+            // supplied method overwrite it (next-auth/utils/logger.js), so
+            // handing it one unconditionally made `debug: false` inert and
+            // put CREATE_STATE / PROFILE_DATA / OAUTH_CALLBACK_RESPONSE --
+            // i.e. the user profile and the provider token response -- on
+            // production stdout. Spreading nothing here leaves the noop in
+            // place. The body guards the dump as well, so the code name still
+            // logs if a caller forces debug on in production but the payload
+            // does not, matching what `error()` above already does.
+            ...(debugEnabled
+                ? {
+                      debug(code: string, metadata: unknown) {
+                          console.log(`\n🐛 [NextAuth Debug]: ${code}`);
+                          if (process.env.NODE_ENV !== "production") {
+                              console.log(JSON.stringify(metadata, null, 2));
+                          }
+                      },
+                  }
+                : {}),
         },
 
         providers: [hiveProvider],
