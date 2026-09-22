@@ -99,8 +99,10 @@ function describeErrorCause(metadata: unknown): string | null {
 /**
  * Builds the app's NextAuth options wired to the Hive OIDC provider:
  * PKCE+state checks, DOT→SimpleJWT token exchange on first sign-in,
- * token-expiry propagation into the session, and a logger that avoids
- * dumping token/PII metadata in production.
+ * token-expiry propagation into the session, and a logger that never dumps
+ * token/PII metadata in production -- including when a caller forces
+ * `debug: true` to chase a production incident, since both `error()` and
+ * `debug()` gate the payload on NODE_ENV rather than on the debug flag.
  */
 export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
     const hiveUrl = (config.hiveUrl ?? process.env.NEXT_PUBLIC_HIVE_URL ?? "")
@@ -203,8 +205,10 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
                 token.data = extraData;
             } catch (error) {
                 console.error("SSO Token Exchange Error:", error);
-                // If exchange fails, you must decide whether to reject the token entirely
-                // or return a token with empty access flags to force a re-login.
+                // Exchange failure rejects sign-in entirely: we never mint a
+                // session without a valid SimpleJWT pair. A degraded token
+                // would give consumers a session whose every Hive call fails
+                // with no way to tell it apart from an expired one.
                 throw new Error("Authentication failed during token exchange.");
             }
         } else if (token && token.data) {

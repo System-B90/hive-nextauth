@@ -30,6 +30,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # A release is the last place to find out the auth callbacks are broken;
+      # consumers pin exact versions and would have to wait for a new one.
+      - name: Test
+        run: npm test
+
       - name: Publish (skip if version already on registry)
         run: |
           name=$(node -p "require('./package.json').name")
