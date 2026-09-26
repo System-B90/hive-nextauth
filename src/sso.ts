@@ -8,6 +8,7 @@ import { Clearance, GenderEnum } from "@system-b90/hive-core";
 import { AuthOptions, CallbacksOptions, Profile } from "next-auth";
 import { OAuthConfig } from "next-auth/providers/index";
 
+import { DEFAULT_ACCESS_DENIED_PAGE } from "./errors.js";
 import { AuthSessionData } from "./session.js";
 
 type JwtTokenData = {
@@ -73,6 +74,18 @@ export type HiveAuthConfig = {
     allowedClearances?: Array<Clearance>;
     /** Sign-in page route. Defaults to `/login`. */
     signInPage?: string;
+    /**
+     * Where the clearance gate sends a user whose Hive login succeeded but
+     * whose clearance is not in `allowedClearances`. Receives
+     * `?reason=clearance&clearance=<n>&gender=<g>`. Defaults to `/access-denied`.
+     */
+    accessDeniedPage?: string;
+    /**
+     * Where NextAuth sends every other auth failure, as `?error=<code>`.
+     * Defaults to the sign-in page, so users never see NextAuth's built-in
+     * English error page at `/api/auth/error`.
+     */
+    errorPage?: string;
     /** NextAuth debug logging. Defaults to `NODE_ENV !== "production"`. */
     debug?: boolean;
 };
@@ -150,9 +163,30 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
         },
     };
 
+    const signInPage = config.signInPage ?? "/login";
+    const accessDeniedPage = config.accessDeniedPage ?? DEFAULT_ACCESS_DENIED_PAGE;
+
+    // Returning a URL instead of `false` makes NextAuth redirect there rather
+    // than to `?error=AccessDenied`, so a rejected user gets a page that says
+    // *why* (their Hive account works; it just lacks clearance) instead of a
+    // generic failed-login alert that invites them to retry forever.
     const signInCallback: CallbacksOptions["signIn"] = async ({ user }) => {
         const hiveUser = user as HiveUser;
-        return allowedClearances.includes(hiveUser.clearance);
+        if (allowedClearances.includes(hiveUser.clearance)) return true;
+        console.warn(
+            `[hive-nextauth] Sign-in rejected: clearance ${String(hiveUser.clearance)} ` +
+                `is not in the allowed list [${allowedClearances.join(", ")}].`,
+        );
+        // The clearance lets the page tailor its copy (a Hanich is sent to
+        // the hadas, a Checker to staff) and gender picks the Hebrew verb
+        // form; neither is a secret -- the user
+        // just saw their own Hive profile.
+        const params = new URLSearchParams({ reason: "clearance" });
+        if (typeof hiveUser.clearance === "number") {
+            params.set("clearance", String(hiveUser.clearance));
+        }
+        if (hiveUser.gender) params.set("gender", hiveUser.gender);
+        return `${accessDeniedPage}?${params}`;
     };
 
     const jwtCallback: CallbacksOptions["jwt"] = async ({
@@ -164,53 +198,77 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
         if (user && account) {
             const hiveUser = user as HiveUser;
 
+            const exchangeUrl = `${hiveUrl}/api/core/sso/exchange/`;
+            let exchangeResponse: Response;
             try {
                 // Exchange the opaque DOT token for a SimpleJWT pair
-                const exchangeResponse = await fetch(
-                    `${hiveUrl}/api/core/sso/exchange/`,
-                    {
-                        method: "POST",
-                        headers: {
-                            Authorization: `Bearer ${account.access_token}`,
-                            "Content-Type": "application/json",
-                        },
+                exchangeResponse = await fetch(exchangeUrl, {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${account.access_token}`,
+                        "Content-Type": "application/json",
                     },
-                );
-
-                if (!exchangeResponse.ok) {
-                    throw new Error(
-                        `Token exchange failed with status: ${exchangeResponse.status}`,
-                    );
-                }
-
-                const jwtData = await exchangeResponse.json();
-
-                const extraData: JwtTokenData = {
-                    user: {
-                        id: hiveUser.id,
-                        name: hiveUser.name,
-                        email: hiveUser.email,
-                        username: hiveUser.username,
-                        clearance: hiveUser.clearance,
-                        program: hiveUser.program,
-                        gender: hiveUser.gender,
-                        display_name: hiveUser.display_name,
-                        is_teacher: hiveUser.is_teacher,
-                    },
-                    // Use the returned SimpleJWT data
-                    expires_at: jwtData.expires_at,
-                    accessToken: jwtData.access_token,
-                    refreshToken: jwtData.refresh_token,
-                };
-                token.data = extraData;
+                });
             } catch (error) {
-                console.error("SSO Token Exchange Error:", error);
-                // Exchange failure rejects sign-in entirely: we never mint a
-                // session without a valid SimpleJWT pair. A degraded token
-                // would give consumers a session whose every Hive call fails
-                // with no way to tell it apart from an expired one.
-                throw new Error("Authentication failed during token exchange.");
+                console.error(
+                    `SSO Token Exchange Error: could not reach ${exchangeUrl}:`,
+                    error,
+                );
+                throw new Error(
+                    `Authentication failed during token exchange. Hive at ${hiveUrl} is unreachable.`,
+                );
             }
+
+            // Exchange failure rejects sign-in entirely: we never mint a
+            // session without a valid SimpleJWT pair. A degraded token would
+            // give consumers a session whose every Hive call fails with no
+            // way to tell it apart from an expired one.
+            if (!exchangeResponse.ok) {
+                console.error(
+                    `SSO Token Exchange Error: ${exchangeUrl} responded ` +
+                        `${exchangeResponse.status} ${exchangeResponse.statusText}`.trimEnd(),
+                );
+                throw new Error(
+                    `Authentication failed during token exchange. Hive responded with status ${exchangeResponse.status}.`,
+                );
+            }
+
+            let jwtData: { access_token?: string; refresh_token?: string; expires_at?: number };
+            try {
+                jwtData = await exchangeResponse.json();
+            } catch (error) {
+                console.error("SSO Token Exchange Error: response is not JSON:", error);
+                throw new Error(
+                    "Authentication failed during token exchange. Hive returned a malformed response.",
+                );
+            }
+            if (!jwtData?.access_token || typeof jwtData.expires_at !== "number") {
+                console.error(
+                    "SSO Token Exchange Error: response is missing access_token or expires_at.",
+                );
+                throw new Error(
+                    "Authentication failed during token exchange. Hive returned an incomplete token.",
+                );
+            }
+
+            const extraData: JwtTokenData = {
+                user: {
+                    id: hiveUser.id,
+                    name: hiveUser.name,
+                    email: hiveUser.email,
+                    username: hiveUser.username,
+                    clearance: hiveUser.clearance,
+                    program: hiveUser.program,
+                    gender: hiveUser.gender,
+                    display_name: hiveUser.display_name,
+                    is_teacher: hiveUser.is_teacher,
+                },
+                // Use the returned SimpleJWT data
+                expires_at: jwtData.expires_at,
+                accessToken: jwtData.access_token,
+                refreshToken: jwtData.refresh_token ?? "",
+            };
+            token.data = extraData;
         } else if (token && token.data) {
             const tokenData = token.data as JwtTokenData;
             if (tokenData.expires_at * 1000 < Date.now()) {
@@ -244,6 +302,19 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
     if (!process.env.NEXTAUTH_SECRET) {
         throw new Error(
             "NEXTAUTH_SECRET environment variable is not set — auth will not function.",
+        );
+    }
+
+    // Not fatal (a build step may construct the options without them), but
+    // without these every sign-in fails with an opaque OAuthSignin error.
+    const missing = [
+        !hiveUrl && "NEXT_PUBLIC_HIVE_URL (or hiveUrl)",
+        !hiveProvider.clientId && "HIVE_CLIENT_ID (or clientId)",
+        !hiveProvider.clientSecret && "HIVE_CLIENT_SECRET (or clientSecret)",
+    ].filter(Boolean);
+    if (missing.length > 0) {
+        console.error(
+            `[hive-nextauth] Missing configuration: ${missing.join(", ")}. Hive sign-in will fail.`,
         );
     }
 
@@ -297,7 +368,8 @@ export function buildHiveAuthOptions(config: HiveAuthConfig = {}): AuthOptions {
 
         providers: [hiveProvider],
         pages: {
-            signIn: config.signInPage ?? "/login",
+            signIn: signInPage,
+            error: config.errorPage ?? signInPage,
         },
         callbacks: {
             signIn: signInCallback,
