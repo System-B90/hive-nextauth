@@ -29,14 +29,14 @@
         "test": "node --experimental-strip-types --experimental-test-module-mocks --test tests/unit/*.test.ts"
     },
     "dependencies": {
-        "@system-b90/hive-core": "^0.3.0"
+        "@system-b90/hive-core": "^0.3.1"
     },
     "peerDependencies": {
         "next-auth": "^4.24.0"
     },
     "devDependencies": {
-        "typescript": "^5.9.0",
         "@types/node": "^20",
-        "next-auth": "^4.24.13"
+        "next-auth": "^4.24.13",
+        "typescript": "^5.9.0"
     }
 }
