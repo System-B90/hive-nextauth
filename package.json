@@ -1,6 +1,6 @@
 {
     "name": "@system-b90/hive-nextauth",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "NextAuth Hive OIDC provider, session types, and session-to-client helpers for System-B90 apps",
     "license": "UNLICENSED",
     "repository": {
