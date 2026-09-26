@@ -6,6 +6,8 @@ import { Clearance, GenderEnum } from "@system-b90/hive-core";
 import { buildHiveAuthOptions } from "../../dist/index.js";
 
 const HIVE_URL = "https://hive.test";
+const DENIED = "/access-denied?reason=clearance";
+const deniedFor = (clearance: number) => `${DENIED}&clearance=${clearance}`;
 
 beforeEach(() => {
     process.env.NEXTAUTH_SECRET = "test-secret";
@@ -34,28 +36,28 @@ describe("signIn clearance gate", () => {
     });
 
     test("rejects every clearance below Segel", async () => {
-        assert.equal(await signIn({ clearance: Clearance.Hanich }), false);
-        assert.equal(await signIn({ clearance: Clearance.Checker }), false);
-        assert.equal(await signIn({ clearance: Clearance.Logged_Out }), false);
+        assert.equal(await signIn({ clearance: Clearance.Hanich }), deniedFor(Clearance.Hanich));
+        assert.equal(await signIn({ clearance: Clearance.Checker }), deniedFor(Clearance.Checker));
+        assert.equal(await signIn({ clearance: Clearance.Logged_Out }), deniedFor(Clearance.Logged_Out));
     });
 
     test("rejects a user with no clearance rather than coercing to allow", async () => {
         // Logged_Out is 0, so any truthiness-based rewrite of this check would
         // both admit undefined and reject a legitimately logged-out zero.
-        assert.equal(await signIn({}), false);
-        assert.equal(await signIn({ clearance: undefined }), false);
-        assert.equal(await signIn({ clearance: null }), false);
+        assert.equal(await signIn({}), DENIED);
+        assert.equal(await signIn({ clearance: undefined }), DENIED);
+        assert.equal(await signIn({ clearance: null }), DENIED);
     });
 
     test("rejects a clearance that is not in the enum at all", async () => {
-        assert.equal(await signIn({ clearance: 99 }), false);
-        assert.equal(await signIn({ clearance: "Admin" }), false);
+        assert.equal(await signIn({ clearance: 99 }), deniedFor(99));
+        assert.equal(await signIn({ clearance: "Admin" }), DENIED);
     });
 
     test("honours a custom allowedClearances list", async () => {
         const onlyAdmin = { allowedClearances: [Clearance.Admin] };
         assert.equal(await signIn({ clearance: Clearance.Admin }, onlyAdmin), true);
-        assert.equal(await signIn({ clearance: Clearance.Segel }, onlyAdmin), false);
+        assert.equal(await signIn({ clearance: Clearance.Segel }, onlyAdmin), deniedFor(Clearance.Segel));
 
         const withHanich = {
             allowedClearances: [Clearance.Hanich, Clearance.Segel, Clearance.Admin],
@@ -65,8 +67,8 @@ describe("signIn clearance gate", () => {
 
     test("an empty allowedClearances list locks everyone out", async () => {
         const noOne = { allowedClearances: [] };
-        assert.equal(await signIn({ clearance: Clearance.Admin }, noOne), false);
-        assert.equal(await signIn({ clearance: Clearance.Segel }, noOne), false);
+        assert.equal(await signIn({ clearance: Clearance.Admin }, noOne), deniedFor(Clearance.Admin));
+        assert.equal(await signIn({ clearance: Clearance.Segel }, noOne), deniedFor(Clearance.Segel));
     });
 });
 
@@ -82,6 +84,29 @@ const HIVE_PROFILE = {
     display_name: "Dana C.",
     is_teacher: true,
 };
+
+describe("signIn rejection target", () => {
+    test("honours a custom accessDeniedPage", async () => {
+        assert.equal(
+            await signIn({ clearance: Clearance.Hanich }, { accessDeniedPage: "/nope" }),
+            "/nope?reason=clearance&clearance=" + Clearance.Hanich,
+        );
+    });
+
+    test("passes the gender so the page can conjugate its copy", async () => {
+        assert.equal(
+            await signIn({ clearance: Clearance.Checker, gender: GenderEnum.Female }),
+            `${deniedFor(Clearance.Checker)}&gender=Female`,
+        );
+    });
+
+    test("routes other auth errors to the sign-in page, not NextAuth's default", () => {
+        const options = buildHiveAuthOptions({ hiveUrl: HIVE_URL });
+        assert.equal(options.pages?.error, "/login");
+        const custom = buildHiveAuthOptions({ hiveUrl: HIVE_URL, errorPage: "/oops" });
+        assert.equal(custom.pages?.error, "/oops");
+    });
+});
 
 describe("OIDC profile mapping", () => {
     test("maps every field a consumer's AuthSessionUser needs", () => {
