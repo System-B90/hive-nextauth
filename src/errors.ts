@@ -32,7 +32,19 @@ export type HiveAuthErrorCode =
     | "Timeout"
     | "Verification";
 
-const HIVE_AUTH_ERROR_MESSAGES: Record<HiveAuthErrorCode, string> = {
+/** Languages the sign-in copy ships in. Hebrew is the default everywhere. */
+export type HiveAuthLocale = "en" | "he";
+
+export const DEFAULT_HIVE_AUTH_LOCALE: HiveAuthLocale = "he";
+
+/** Text direction for a locale, for `dir=` on alerts/buttons showing this copy. */
+export function getHiveAuthDirection(
+    locale: HiveAuthLocale = DEFAULT_HIVE_AUTH_LOCALE,
+): "ltr" | "rtl" {
+    return locale === "he" ? "rtl" : "ltr";
+}
+
+const HIVE_AUTH_ERROR_MESSAGES_HE: Record<HiveAuthErrorCode, string> = {
     AccessDenied: "למשתמש שלך אין הרשאה מתאימה לגישה למערכת.",
     AuthenticationFailed:
         "שירות ההתחברות אינו זמין כרגע. נסו שוב בעוד מספר דקות.",
@@ -53,20 +65,53 @@ const HIVE_AUTH_ERROR_MESSAGES: Record<HiveAuthErrorCode, string> = {
     Verification: "קישור ההתחברות פג תוקף או שכבר נעשה בו שימוש.",
 };
 
-const UNKNOWN_ERROR_MESSAGE = "אירעה שגיאה במהלך תהליך ההתחברות. ניתן לנסות שוב.";
+const HIVE_AUTH_ERROR_MESSAGES_EN: Record<HiveAuthErrorCode, string> = {
+    AccessDenied: "Your account does not have permission to access this system.",
+    AuthenticationFailed:
+        "The sign-in service is unavailable right now. Try again in a few minutes.",
+    Callback:
+        "Hive verified you, but signing in to this system could not be completed. Try again, and contact support if it keeps happening.",
+    Configuration: "Server configuration error. Contact support.",
+    NetworkError: "Hive cannot be reached. Check your network connection and try again.",
+    OAuthAccountNotLinked:
+        "This email is linked to an existing account. Sign in with the method you used originally.",
+    OAuthCallback:
+        "Signing in with Hive could not be completed. Hive may be unavailable right now.",
+    OAuthSignin:
+        "Signing in with Hive could not be started. Hive may be unavailable right now.",
+    SessionRequired: "Please sign in again to continue.",
+    Timeout: "Hive did not respond in time. Check your network connection and try again.",
+    Verification: "The sign-in link has expired or was already used.",
+};
+
+const HIVE_AUTH_ERROR_MESSAGES: Record<
+    HiveAuthLocale,
+    Record<HiveAuthErrorCode, string>
+> = {
+    en: HIVE_AUTH_ERROR_MESSAGES_EN,
+    he: HIVE_AUTH_ERROR_MESSAGES_HE,
+};
+
+const UNKNOWN_ERROR_MESSAGES: Record<HiveAuthLocale, string> = {
+    en: "Something went wrong while signing in. You can try again.",
+    he: "אירעה שגיאה במהלך תהליך ההתחברות. ניתן לנסות שוב.",
+};
 
 /**
- * Maps a NextAuth `?error=` code to a Hebrew message. Returns null when
+ * Maps a NextAuth `?error=` code to a message in `locale` (Hebrew by default). Returns null when
  * there is no error; unknown codes get a generic message rather than null so
  * a failure is never silently swallowed.
  */
 export function getHiveAuthErrorMessage(
     code: null | string | undefined,
+    locale: HiveAuthLocale = DEFAULT_HIVE_AUTH_LOCALE,
 ): null | string {
     if (!code) return null;
+    const messages = HIVE_AUTH_ERROR_MESSAGES[locale] ?? HIVE_AUTH_ERROR_MESSAGES_HE;
     return (
-        HIVE_AUTH_ERROR_MESSAGES[code as HiveAuthErrorCode] ??
-        UNKNOWN_ERROR_MESSAGE
+        messages[code as HiveAuthErrorCode] ??
+        UNKNOWN_ERROR_MESSAGES[locale] ??
+        UNKNOWN_ERROR_MESSAGES.he
     );
 }
 
