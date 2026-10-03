@@ -1,6 +1,6 @@
 {
     "name": "@system-b90/hive-nextauth",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "NextAuth Hive OIDC provider, session types, and session-to-client helpers for System-B90 apps",
     "license": "UNLICENSED",
     "repository": {
@@ -17,6 +17,10 @@
         ".": {
             "types": "./dist/index.d.ts",
             "default": "./dist/index.js"
+        },
+        "./react": {
+            "types": "./dist/react/index.d.ts",
+            "default": "./dist/react/index.js"
         }
     },
     "files": [
@@ -26,17 +30,33 @@
         "build": "tsc -p tsconfig.json",
         "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
         "pretest": "npm run build",
-        "test": "node --experimental-strip-types --experimental-test-module-mocks --test tests/unit/*.test.ts"
+        "test": "node --experimental-strip-types --experimental-test-module-mocks --test tests/unit/*.test.ts tests/integration/*.test.ts"
     },
     "dependencies": {
         "@system-b90/hive-core": "^0.3.0"
     },
     "peerDependencies": {
-        "next-auth": "^4.24.0"
+        "@mui/material": "^7.0.0 || ^9.0.0",
+        "next-auth": "^4.24.0",
+        "react": "^18.0.0 || ^19.0.0"
     },
     "devDependencies": {
+        "@emotion/react": "^11.14.0",
+        "@emotion/styled": "^11.14.1",
+        "@mui/material": "^9.4.0",
         "@types/node": "^20",
+        "@types/react": "^19.3.0",
         "next-auth": "^4.24.13",
+        "react": "^19.3.0",
+        "react-dom": "^19.3.0",
         "typescript": "^5.9.0"
+    },
+    "peerDependenciesMeta": {
+        "@mui/material": {
+            "optional": true
+        },
+        "react": {
+            "optional": true
+        }
     }
 }
