@@ -1,0 +1,67 @@
+name: Integration Tests
+
+on:
+    workflow_dispatch:
+    # Master only, deliberately (same as hive-core): the Hive is shared with
+    # the other repos' E2E runs, so per-PR runs would queue them behind us.
+    # Use workflow_dispatch to run it against a branch on purpose.
+    push:
+        branches: [master]
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    packages: read
+    # shared-hive-acquire cancels this run if it holds Hive past its budget.
+    actions: write
+
+jobs:
+    hive-sso-integration:
+        name: Hive SSO vs Shared Hive
+        # The persistent shared Hive lives on the shared-hive runners only;
+        # shared-hive-acquire fails anywhere else.
+        runs-on: [self-hosted, shared-hive]
+        # Queueing for the lock + the Hive budget.
+        timeout-minutes: 75
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v7
+
+            # Everything slow happens before taking the shared Hive.
+            # registry-url + scope: @system-b90/hive-core comes from GitHub Packages.
+            - name: Set up Node
+              uses: actions/setup-node@v6
+              with:
+                  node-version: "24"
+                  registry-url: https://npm.pkg.github.com
+                  scope: "@system-b90"
+
+            - name: Install dependencies
+              run: npm ci
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Build
+              run: npm run build
+
+            # Exclusive, reset to baseline. Never setup-hive, never tear down.
+            - name: Acquire shared Hive
+              uses: System-B90/.github/actions/shared-hive-acquire@main
+
+            # Self-signed cert for hive.org; baseline superuser admin/Password1.
+            # HIVE_INTEGRATION_REQUIRED turns "Hive unreachable" into a failure
+            # instead of a skip, so a broken Hive can't pass green.
+            - name: Run tests against shared Hive
+              run: npm run test --ignore-scripts
+              env:
+                  NODE_TLS_REJECT_UNAUTHORIZED: "0"
+                  HIVE_TEST_URL: https://hive.org
+                  HIVE_INTEGRATION_REQUIRED: "1"
+
+            - name: Release shared Hive
+              if: always()
+              uses: System-B90/.github/actions/shared-hive-release@main
