@@ -35,7 +35,32 @@ return message ? <Alert dir={getHiveAuthDirection("en")} severity="error">{messa
 ```
 
 Report a `signIn()` that rejects as `NetworkError`, and one with no answer after about
-15 s as `Timeout`.
+15 s as `Timeout`. `signInWithTimeout(() => signIn("hive"), timeoutMs?)` does exactly
+that and resolves to `null`, `"Timeout"` or `"NetworkError"`.
+
+### React components
+
+`@system-b90/hive-nextauth/react` ships ready-made login-page pieces (client
+components). They need the optional peers `react` and `@mui/material`; the root entry
+point does not.
+
+```tsx
+import { AuthErrorAlert, LoginWithHive } from "@system-b90/hive-nextauth/react";
+
+const params = useSearchParams();
+return (
+    <>
+        <AuthErrorAlert code={params.get("error")} description={params.get("error_description")} />
+        <LoginWithHive callbackUrl="/" icon={<HiveLogo />} />
+    </>
+);
+```
+
+- `LoginWithHive`: spinner while redirecting, then `Timeout`/`NetworkError` through
+  `onError`, or an inline `AuthErrorAlert` when `onError` is omitted.
+- `AuthErrorAlert`: localized message, optional detail, and the raw code.
+- Both take `locale` (`"he"` default, or `"en"`) and set `dir` from it. The button's icon
+  margins are logical, so they flip correctly under RTL.
 
 ### App and Hive on one Docker host
 
