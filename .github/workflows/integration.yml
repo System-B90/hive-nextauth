@@ -7,6 +7,13 @@ on:
     # Use workflow_dispatch to run it against a branch on purpose.
     push:
         branches: [master]
+    # PRs only when the integration suite or this workflow changes, so the
+    # change that adds or edits Hive tests is proven before it merges.
+    pull_request:
+        branches: [master]
+        paths:
+            - "tests/integration/**"
+            - ".github/workflows/integration.yml"
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
